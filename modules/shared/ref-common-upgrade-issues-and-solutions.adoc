@@ -124,3 +124,58 @@ ALTER DATABASE <database_name> SET DateStyle = 'ISO, MDY';
 ----
 +
 For more information about external database configuration, see {configuring-book-link}#migrate-local-databases-to-an-external-database-server-using-the-operator_configure-external-postgresql-databases[Migrate local databases to an external database server by using the Operator].
+
+== Dynamic Client Registration wildcard redirect URI pattern rejected after upgrade
+
+This issue occurs when the Model Context Protocol (MCP) server's Dynamic Client Registration (DCR) configuration uses a bare wildcard redirect URI pattern, such as `+allowedRedirectUriPatterns: ["*"]+`.
+{product} {product-version} ships a version of {backstage} where `@backstage/plugin-auth-backend` validates each allowlist pattern per URL component and requires every pattern to include an explicit protocol.
+The validation rejects patterns that omit a protocol, including a bare `+*+`, as invalid configuration instead of silently accepting them, and MCP clients can no longer register dynamically until you correct the configuration.
+
+To resolve this issue:
+
+* Replace wildcard patterns with explicit, protocol-qualified patterns that match only the redirect URIs your MCP clients use.
+For example, use `+http://localhost:*/*+` to allow any port and path on localhost, or `https://your-mcp-client.example.com/callback` for a specific client.
++
+For configuration details, see {model-context-protocol-book-link}#configure-mcp-tokens-and-endpoints-to-authorize-client-access_interacting-with-model-context-protocol-tools-for-rhdh[Configure MCP tokens and endpoints to authorize client access].
+
+== Custom dynamic plugin export fails with TypeScript config schema errors
+
+----
+error TS2307: Cannot find module './src' or its corresponding type declarations.
+----
+
+This issue occurs when a custom or community dynamic plugin ships a `config.d.ts` configuration schema file whose imports resolve outside the published package, or resolve to non-primitive types such as browser-only UI library types.
+Plugins built against {product-short} 1.10 and earlier used the Scalprum export path, which did not run strict TypeScript validation of `config.d.ts` files.
+{product} {product-version} uses the standard module federation export path instead.
+This path validates every `config.d.ts` file in the dependency tree with `@backstage/config-loader`.
+The export fails with errors such as the one shown earlier, or `No value declaration found for symbol "matchMedia"`, when the schema file cannot resolve to primitive types.
+
+To resolve this issue:
+
+* Update the plugin's `config.d.ts` file to declare configuration types inline using only primitive TypeScript types, and remove any imports that resolve outside the file itself.
+* Rebuild and re-export the plugin with the latest `@red-hat-developer-hub/cli`, then confirm that the export completes without TypeScript configuration schema errors.
++
+For guidance on authoring plugin configuration schemas, see {develop-and-deploy-dynamic-plugins-book-link}[Develop and deploy dynamic plugins in {product-short}].
+
+== Conditional RBAC policies are silently ignored by if-predicate UI visibility checks
+
+This issue occurs when an administrator configures the new extension `if` predicate syntax for RBAC-driven UI visibility, for example:
+
+[source,yaml]
+----
+if:
+  permissions: { $contains: 'catalog.entity.create' }
+----
+
+for a permission that uses a conditional, resource-scoped policy such as an ownership-based rule.
+The application evaluates `if` predicates a single time, at startup after sign-in, before any resource context exists, so `@backstage-community/plugin-rbac-backend` cannot evaluate conditional decisions for these predicates.
+The condition silently falls back to the policy's default behavior instead of returning an error.
+For the same reason, a mismatch between the user entity reference produced by your sign-in resolver and the subject configured in your RBAC policy causes the gated extension to not appear, with no error reported to the user or in the logs.
+
+To resolve this issue:
+
+* Use `if` predicates only for coarse-grained, non-resource permission checks, such as enabling or disabling an entire page or navigation item.
+* For ownership-based or other resource-scoped conditional policies, enforce the restriction in the backend plugin or component logic instead of relying on the `if` predicate.
+* Confirm that the user entity reference produced by your sign-in resolver matches the subject defined in your RBAC policy.
++
+For the full list of limitations, see {authorization-book-link}#unsupported-scenarios-and-constraints-for-rbac-ui-visibility_hide-pages-and-navigation-elements-using-rbac-to-maintain-a-secure-ui[Unsupported scenarios and constraints for RBAC UI visibility].
